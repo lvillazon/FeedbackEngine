@@ -8,27 +8,32 @@ import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
+import com.google.api.services.classroom.ClassroomScopes;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.List;
 
 public class GoogleAuthenticator {
     private static final String CREDENTIALS_FILE_PATH = "/credentials.json";
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
-    private static final String[] SCOPES = {
-            "https://www.googleapis.com/auth/classroom.courses.readonly",
-            "https://www.googleapis.com/auth/classroom.coursework.students.readonly"
-    };
+    //private static final String[] SCOPES = {
+    //        "https://www.googleapis.com/auth/classroom.courses.readonly",
+    //        "https://www.googleapis.com/auth/classroom.coursework.students.readonly"
+    //};
+    private static final List<String> SCOPES = Arrays.asList(
+            ClassroomScopes.CLASSROOM_COURSES_READONLY,
+            ClassroomScopes.CLASSROOM_COURSEWORK_STUDENTS_READONLY,
+            ClassroomScopes.CLASSROOM_ROSTERS_READONLY);
 
     public Credential authenticate() throws IOException {
         InputStream in = GoogleAuthenticator.class.getResourceAsStream(CREDENTIALS_FILE_PATH);
         GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JSON_FACTORY, new InputStreamReader(in));
 
         GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
-                new NetHttpTransport(), JSON_FACTORY, clientSecrets, Arrays.asList(SCOPES))
+                new NetHttpTransport(), JSON_FACTORY, clientSecrets, SCOPES)
                 .setDataStoreFactory(new FileDataStoreFactory(new java.io.File("tokens")))
                 .setAccessType("offline")
                 .build();
