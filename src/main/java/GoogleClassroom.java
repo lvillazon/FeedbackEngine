@@ -1,34 +1,46 @@
 import com.google.api.services.classroom.Classroom;
 import com.google.api.services.classroom.model.*;
+import com.google.api.services.drive.Drive;
 
 import javax.swing.*;
 import javax.swing.event.ListSelectionListener;
 import java.awt.*;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 public class GoogleClassroom {
-    private static Course selectedCourse;
-    private static Classroom service;
-    private static List<CourseWork> assignments = new ArrayList<>();
+    private Course selectedCourse;
+    private Classroom classroomService;
+    private Drive driveService;
+    private List<CourseWork> assignments = new ArrayList<>();
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             try {
-                createAndShowGUI();
+                new GoogleClassroom().createAndShowGUI();
             } catch (IOException e) {
+                e.printStackTrace();
+            } catch (GeneralSecurityException e) {
                 e.printStackTrace();
             }
         });
     }
 
-    private static void createAndShowGUI() throws IOException {
+    public GoogleClassroom() throws IOException, GeneralSecurityException {
         GoogleAuthenticator authenticator = new GoogleAuthenticator();
-        Classroom service = authenticator.getClassroomService();
-        List<Course> courses = getCourses(service);
+        classroomService = authenticator.getClassroomService();
+        driveService = authenticator.getDriveService();
+    }
+
+    private void createAndShowGUI() throws IOException {
+        List<Course> courses = getCourses(classroomService);
 
         JFrame frame = new JFrame("Google Classroom Courses and Assignments");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -75,8 +87,8 @@ public class GoogleClassroom {
         mainSplitPane.setDividerLocation(200);
 
         // assign selection listeners
-        courseList.addListSelectionListener(createCourseListSelectionListener(frame, courseList, assignmentListModel, courses, service));
-        assignmentsList.addListSelectionListener(createAssignmentsListSelectionListener(frame, courseList, assignmentsList, studentSubmissionsListModel, categorizedStudentsModel, courses, service));
+        courseList.addListSelectionListener(createCourseListSelectionListener(frame, courseList, assignmentListModel, courses, classroomService));
+        assignmentsList.addListSelectionListener(createAssignmentsListSelectionListener(frame, courseList, assignmentsList, studentSubmissionsListModel, categorizedStudentsModel, courses, classroomService));
         categorizedStudentsList.addListSelectionListener(createCategorizedStudentsListSelectionListener(categorizedStudentsList, studentSubmissionsList, studentSubmissionsListModel, submittedAttachmentsListModel));
         studentSubmissionsList.addListSelectionListener(createStudentSubmissionsListSelectionListener(frame, categorizedStudentsList, studentSubmissionsList));
 
@@ -89,7 +101,7 @@ public class GoogleClassroom {
 
 
 
-    private static List<Course> getCourses(Classroom service) throws IOException {
+    private List<Course> getCourses(Classroom service) throws IOException {
         List<Course> courses = service.courses().list().setPageSize(10).execute().getCourses();
         if (courses == null || courses.isEmpty()) {
             System.out.println("No courses found.");
@@ -102,7 +114,7 @@ public class GoogleClassroom {
         return courses;
     }
 
-    private static List<CourseWork> getAssignments(Classroom service, String courseId) throws IOException {
+    private List<CourseWork> getAssignments(Classroom service, String courseId) throws IOException {
         List<CourseWork> courseWorks = service.courses().courseWork().list(courseId).setPageSize(10).execute().getCourseWork();
         if (courseWorks == null || courseWorks.isEmpty()) {
             System.out.println("No assignments found.");
@@ -115,7 +127,7 @@ public class GoogleClassroom {
         return courseWorks;
     }
 
-    private static List<NamedStudentSubmission> getStudentSubmissions(Classroom service, String courseId, String courseWorkId) throws IOException {
+    private List<NamedStudentSubmission> getStudentSubmissions(Classroom service, String courseId, String courseWorkId) throws IOException {
         List<NamedStudentSubmission> submissions = new ArrayList<>();
         String nextPageToken = null;
 
@@ -143,7 +155,7 @@ public class GoogleClassroom {
         return submissions;
     }
 
-    private static ListSelectionListener createCourseListSelectionListener(JFrame frame, JList<Course> courseList, DefaultListModel<CourseWork> assignmentListModel, List<Course> courses, Classroom service) {
+    private ListSelectionListener createCourseListSelectionListener(JFrame frame, JList<Course> courseList, DefaultListModel<CourseWork> assignmentListModel, List<Course> courses, Classroom service) {
         return e -> {
             if (!e.getValueIsAdjusting()) {
                 int selectedIndex = courseList.getSelectedIndex();
@@ -169,7 +181,7 @@ public class GoogleClassroom {
         };
     }
 
-    private static ListSelectionListener createAssignmentsListSelectionListener(JFrame frame, JList<Course> courseList, JList<CourseWork> assignmentsList, DefaultListModel<NamedStudentSubmission> studentSubmissionsListModel, DefaultListModel<String> categorizedStudentsModel, List<Course> courses, Classroom service) {
+    private ListSelectionListener createAssignmentsListSelectionListener(JFrame frame, JList<Course> courseList, JList<CourseWork> assignmentsList, DefaultListModel<NamedStudentSubmission> studentSubmissionsListModel, DefaultListModel<String> categorizedStudentsModel, List<Course> courses, Classroom service) {
         return e -> {
             if (!e.getValueIsAdjusting()) {
                 int selectedIndex = assignmentsList.getSelectedIndex();
@@ -233,7 +245,7 @@ public class GoogleClassroom {
     }
 
 
-    private static ListSelectionListener createCategorizedStudentsListSelectionListener(JList<String> categorizedStudentsList, JList<NamedStudentSubmission> studentSubmissionsList, DefaultListModel<NamedStudentSubmission> studentSubmissionsListModel, DefaultListModel<String> submittedAttachmentsListModel) {
+    private ListSelectionListener createCategorizedStudentsListSelectionListener(JList<String> categorizedStudentsList, JList<NamedStudentSubmission> studentSubmissionsList, DefaultListModel<NamedStudentSubmission> studentSubmissionsListModel, DefaultListModel<String> submittedAttachmentsListModel) {
         return e -> {
             if (!e.getValueIsAdjusting()) {
                 int selectedIndex = categorizedStudentsList.getSelectedIndex();
@@ -258,7 +270,7 @@ public class GoogleClassroom {
     }
 
 
-    private static ListSelectionListener createStudentSubmissionsListSelectionListener(JFrame frame, JList<String> categorizedStudentsList, JList<NamedStudentSubmission> studentSubmissionsList) {
+    private ListSelectionListener createStudentSubmissionsListSelectionListener(JFrame frame, JList<String> categorizedStudentsList, JList<NamedStudentSubmission> studentSubmissionsList) {
         return e -> {
             if (!e.getValueIsAdjusting()) {
                 int selectedIndex = studentSubmissionsList.getSelectedIndex();
@@ -266,6 +278,40 @@ public class GoogleClassroom {
                     NamedStudentSubmission selectedSubmission = studentSubmissionsList.getModel().getElementAt(selectedIndex);
                     List<Attachment> attachments = selectedSubmission.getAttachments();
                     if (!attachments.isEmpty() && attachments.get(0).getDriveFile() != null) {
+
+                        String documentId = attachments.get(0).getDriveFile().getId(); // The ID of the Google Docs document from the assignment
+                        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                        try {
+                            driveService.files().export(documentId, "text/html").executeMediaAndDownloadTo(outputStream);
+                        } catch (IOException ex) {
+                            ex.printStackTrace();
+                        }
+                        String htmlContent = null;
+                        try {
+                            htmlContent = outputStream.toString(StandardCharsets.UTF_8.name());
+                        } catch (UnsupportedEncodingException ex) {
+                            ex.printStackTrace();
+                        }
+
+// Create a JEditorPane and display the exported HTML content
+                        JEditorPane editorPane = new JEditorPane();
+                        editorPane.setEditable(false);
+                        editorPane.setContentType("text/html");
+                        editorPane.setText(htmlContent);
+
+// You can add the editorPane to a JScrollPane and display it in a JFrame or any other container you prefer
+                        JScrollPane scrollPane = new JScrollPane(editorPane);
+                        JFrame docframe = new JFrame("Google Docs Document");
+                        docframe.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+                        docframe.getContentPane().add(scrollPane);
+                        docframe.setSize(800, 600);
+                        docframe.setVisible(true);
+
+
+
+
+
+
                         String fileId = attachments.get(0).getDriveFile().getId();
                         String fileUrl = "https://drive.google.com/file/d/" + fileId;
                         displayGoogleDoc(frame, fileUrl);
@@ -277,10 +323,7 @@ public class GoogleClassroom {
         };
     }
 
-
-
-
-    private static void displayGoogleDoc(JFrame parentFrame, String fileUrl) {
+    private void displayGoogleDoc(JFrame parentFrame, String fileUrl) {
         JDialog dialog = new JDialog(parentFrame, "Google Doc", true);
         dialog.setSize(800, 600);
         dialog.setLocationRelativeTo(parentFrame);
