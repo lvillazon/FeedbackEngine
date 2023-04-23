@@ -1,10 +1,8 @@
-import com.google.api.services.classroom.model.StudentSubmission;
-
 import javax.swing.*;
 import java.awt.*;
 
 public class SubmissionDetailsFrame extends JFrame {
-    public SubmissionDetailsFrame(StudentSubmission submission) {
+    public SubmissionDetailsFrame(NamedStudentSubmission submission) {
         setTitle("Submission Details");
         setSize(400, 300);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -18,9 +16,9 @@ public class SubmissionDetailsFrame extends JFrame {
         JScrollPane scrollPane = new JScrollPane(detailsTextArea);
         add(scrollPane, BorderLayout.CENTER);
 
-        detailsTextArea.append("Student ID: " + submission.getUserId() + "\n");
-        detailsTextArea.append("Submission ID: " + submission.getId() + "\n");
-        detailsTextArea.append("Submission Status: " + submission.getState() + "\n");
+        detailsTextArea.append("Student Name: " + submission.getStudentName() + "\n");
+        detailsTextArea.append("Submission ID: " + submission.getStudentSubmission().getId() + "\n");
+        detailsTextArea.append("Submission Status: " + submission.getStudentSubmission().getState() + "\n");
 
         setVisible(true);
     }
