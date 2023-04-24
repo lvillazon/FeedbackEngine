@@ -12,10 +12,8 @@ import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.GeneralSecurityException;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javafx.application.Platform;
@@ -109,8 +107,23 @@ public class GoogleClassroom {
 
 
 
-    private List<Course> getCourses(Classroom service) throws IOException {
-        List<Course> courses = service.courses().list().setPageSize(10).execute().getCourses();
+    private List<Course> getCourses(Classroom service) {
+        List<Course> courses = new ArrayList<>();
+        try {
+            String nextPageToken = null;
+            do {
+                ListCoursesResponse response = service.courses()
+                        .list()
+                        .setCourseStates(Arrays.asList("ACTIVE")) // Add this line to filter only active courses
+                        .setPageSize(99)
+                        .setPageToken(nextPageToken)
+                        .execute();
+                courses.addAll(response.getCourses());
+                nextPageToken = response.getNextPageToken();
+            } while (nextPageToken != null);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         if (courses == null || courses.isEmpty()) {
             System.out.println("No courses found.");
         } else {
@@ -234,12 +247,23 @@ public class GoogleClassroom {
                         }
 
                         for (Map.Entry<String, List<NamedStudentSubmission>> entry : categorizedStudents.entrySet()) {
+                            for (NamedStudentSubmission namedSubmission : entry.getValue()) {
+                                String status = entry.getKey();
+                                categorizedStudentsModel.addElement(status + " " + namedSubmission.getStudentName());
+                                studentSubmissionsListModel.addElement(namedSubmission);
+                            }
+                        }
+
+                        /*
+                        for (Map.Entry<String, List<NamedStudentSubmission>> entry : categorizedStudents.entrySet()) {
                             categorizedStudentsModel.addElement(entry.getKey());
                             for (NamedStudentSubmission namedSubmission : entry.getValue()) {
                                 categorizedStudentsModel.addElement("  - " + namedSubmission.getStudentName());
                                 studentSubmissionsListModel.addElement(namedSubmission);
                             }
                         }
+
+                         */
 
                     } catch (IOException ex) {
                         ex.printStackTrace();
