@@ -6,14 +6,22 @@ import javax.swing.*;
 import javax.swing.event.ListSelectionListener;
 import java.awt.*;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import javafx.application.Platform;
+import javafx.embed.swing.JFXPanel;
+import javafx.scene.Scene;
+import javafx.scene.web.WebView;
 
 public class GoogleClassroom {
     private Course selectedCourse;
@@ -278,7 +286,6 @@ public class GoogleClassroom {
                     NamedStudentSubmission selectedSubmission = studentSubmissionsList.getModel().getElementAt(selectedIndex);
                     List<Attachment> attachments = selectedSubmission.getAttachments();
                     if (!attachments.isEmpty() && attachments.get(0).getDriveFile() != null) {
-
                         String documentId = attachments.get(0).getDriveFile().getId(); // The ID of the Google Docs document from the assignment
                         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
                         try {
@@ -292,57 +299,81 @@ public class GoogleClassroom {
                         } catch (UnsupportedEncodingException ex) {
                             ex.printStackTrace();
                         }
-
-// Create a JEditorPane and display the exported HTML content
-                        JEditorPane editorPane = new JEditorPane();
-                        editorPane.setEditable(false);
-                        editorPane.setContentType("text/html");
-                        editorPane.setText(htmlContent);
-
-// You can add the editorPane to a JScrollPane and display it in a JFrame or any other container you prefer
-                        JScrollPane scrollPane = new JScrollPane(editorPane);
-                        JFrame docframe = new JFrame("Google Docs Document");
-                        docframe.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-                        docframe.getContentPane().add(scrollPane);
-                        docframe.setSize(800, 600);
-                        docframe.setVisible(true);
-
-
-
-
-
-
-                        String fileId = attachments.get(0).getDriveFile().getId();
-                        String fileUrl = "https://drive.google.com/file/d/" + fileId;
-                        displayGoogleDoc(frame, fileUrl);
+                        displayDocumentText(htmlContent);
                     } else {
                         JOptionPane.showMessageDialog(frame, "The selected submission has no accessible attachments.", "No Attachments", JOptionPane.INFORMATION_MESSAGE);
                     }
-               }
+                }
             }
         };
     }
 
-    private void displayGoogleDoc(JFrame parentFrame, String fileUrl) {
-        JDialog dialog = new JDialog(parentFrame, "Google Doc", true);
-        dialog.setSize(800, 600);
-        dialog.setLocationRelativeTo(parentFrame);
+    private void displayDocumentText(String htmlContent) {
+        // Initialize the JFXPanel (needed for rendering JavaFX content in a Swing application)
+        JFXPanel jfxPanel = new JFXPanel();
 
-        JEditorPane editorPane = new JEditorPane();
-        editorPane.setEditable(false);
+        // Create a new JFrame and add the JFXPanel to it
+        JFrame docframe = new JFrame("Google Docs Document");
+        docframe.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        docframe.getContentPane().add(jfxPanel);
+        docframe.setSize(800, 600);
+        docframe.setVisible(true);
 
+        // Run the WebView code on the JavaFX Application Thread
+        Platform.runLater(() -> {
+            WebView webView = new WebView();
+            webView.getEngine().loadContent(htmlContent);
+
+            jfxPanel.setScene(new Scene(webView));
+        });
+    }
+
+    private String extractDocId(String fileURL) {
+        Pattern pattern = Pattern.compile("(?<=/d/)[^/]+");
+        Matcher matcher = pattern.matcher(fileURL);
+        if (matcher.find()) {
+            return matcher.group();
+        } else {
+            return null;
+        }
+    }
+
+    public void displayGoogleDoc(JFrame frame, String docId) {
         try {
-            editorPane.setPage(fileUrl);
+            //Drive driveService = googleAuthenticator.getDriveService();
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            driveService.files().export(docId, "text/plain")
+                    .executeMediaAndDownloadTo(outputStream);
+            displayText(new String(outputStream.toByteArray(), StandardCharsets.UTF_8));
         } catch (IOException e) {
             e.printStackTrace();
-            editorPane.setContentType("text/html");
-            editorPane.setText("<html><body><h1>Error loading Google Doc</h1><p>Unable to load the document.</p></body></html>");
         }
-
-        JScrollPane scrollPane = new JScrollPane(editorPane);
-        dialog.add(scrollPane);
-        dialog.setVisible(true);
     }
+
+    private void displayPDF(byte[] pdfContent) {
+        try {
+            File tempFile = File.createTempFile("document", ".pdf");
+            tempFile.deleteOnExit();
+            Files.write(tempFile.toPath(), pdfContent);
+
+            if (Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(tempFile);
+            } else {
+                System.err.println("Desktop is not supported, cannot display the PDF.");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void displayText(String textContent) {
+        JTextArea textArea = new JTextArea(textContent);
+        textArea.setEditable(false);
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setPreferredSize(new Dimension(800, 600));
+        JOptionPane.showMessageDialog(null, scrollPane, "Document Content", JOptionPane.INFORMATION_MESSAGE);
+    }
+
 
 }
 

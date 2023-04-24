@@ -37,7 +37,8 @@ public class GoogleAuthenticator {
 
         GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
                 new NetHttpTransport(), JSON_FACTORY, clientSecrets, SCOPES)
-                .setDataStoreFactory(new FileDataStoreFactory(new java.io.File("tokens")))
+//                .setDataStoreFactory(new FileDataStoreFactory(new java.io.File("tokens")))
+                .setDataStoreFactory(new FileDataStoreFactory(new java.io.File(System.getProperty("user.home"), "tokens")))
                 .setAccessType("offline")
                 .build();
 
