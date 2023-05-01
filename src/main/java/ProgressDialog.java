@@ -18,10 +18,11 @@ public class ProgressDialog extends JDialog {
         this.add(new JLabel(message), constraints);
 
         progressBar = new JProgressBar(0, 100);
-        progressBar.setIndeterminate(true);
+        progressBar.setIndeterminate(false);
         constraints.gridy = 1;
         constraints.insets = new Insets(0, 10, 10, 10);
         this.add(progressBar, constraints);
+        this.setVisible(true);
     }
 
     public void setValue(int value) {
