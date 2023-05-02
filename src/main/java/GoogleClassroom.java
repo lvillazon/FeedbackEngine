@@ -45,7 +45,6 @@ public class GoogleClassroom {
         }
 
         public void publishProgress(int progress) {
-            System.out.println("updating progress:"+progress);
             this.publish(progress);
         }
 
@@ -68,6 +67,11 @@ public class GoogleClassroom {
             } finally {
                 progressBar.setVisible(false);
                 progressBar.setValue(0);
+                System.out.println("LOG: create viewer");
+                StudentAttachmentsViewer attachmentsViewer = new StudentAttachmentsViewer(driveService, new LinkedHashMap<>());
+                System.out.println("LOG: " + studentAttachments.size() + " attachments");
+                attachmentsViewer.setStudentAttachments(studentAttachments);
+                attachmentsViewer.refreshViewer();
             }
         }
     }
@@ -240,12 +244,12 @@ public class GoogleClassroom {
                     }
                 }
                 worker.publishProgress(1);
-//                progressBar.setValue(progressBar.getValue()+1);
             }
 
             nextPageToken = response.getNextPageToken();
         } while (nextPageToken != null);
 
+        System.out.println("LOG: fetch complete!");
         return submissions;
     }
 
@@ -320,12 +324,14 @@ public class GoogleClassroom {
 
                     // Show the progress bar
                     progressBar.setVisible(true);
+                    progressBar.setMaximum(26); //TODO get the actual number of students in the class.
                     frame.revalidate();
                     frame.repaint();
 
                     // Create worker object to fetch submissions in the background
                     FetchSubmissionsWorker worker = new FetchSubmissionsWorker(service, courseId, courseWorkId, studentAttachments, studentSubmissionsListModel);
                     worker.execute();
+
                 }
             }
         };

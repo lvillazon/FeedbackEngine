@@ -47,7 +47,7 @@ test {
 
 apply plugin: 'application'
 
-mainClassName = 'GoogleClassroomExample'
+mainClassName = 'GoogleClassroom'
 
 
 run {
