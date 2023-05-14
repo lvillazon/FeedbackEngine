@@ -17,7 +17,7 @@ public class NamedStudentSubmission {
         return studentName;
     }
 
-    public StudentSubmission getStudentSubmission() {
+    public StudentSubmission getSubmission() {
         return studentSubmission;
     }
 

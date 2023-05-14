@@ -7,74 +7,20 @@ import javax.swing.event.ListSelectionListener;
 import java.awt.*;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class GoogleClassroom {
-    private final Classroom classroomService;
-    private final Drive driveService;
+    public final Classroom classroomService;
+    public final Drive driveService;
 //    private final List<CourseWork> assignments = new ArrayList<>();
-    private JProgressBar  progressBar;
-    private JFrame frame;
-
-    private class FetchSubmissionsWorker extends SwingWorker<List<NamedStudentSubmission>, Integer> {
-        private Classroom service;
-        private String courseId;
-        private String courseWorkId;
-        private Map<String, String> studentAttachments;
-        private DefaultListModel<NamedStudentSubmission> studentSubmissionsListModel;
-
-        public FetchSubmissionsWorker(Classroom service, String courseId, String courseWorkId, Map<String, String> studentAttachments, DefaultListModel<NamedStudentSubmission> studentSubmissionsListModel) {
-            this.service = service;
-            this.courseId = courseId;
-            this.courseWorkId = courseWorkId;
-            this.studentAttachments = studentAttachments;
-            this.studentSubmissionsListModel = studentSubmissionsListModel;
-        }
-
-        @Override
-        protected List<NamedStudentSubmission> doInBackground() throws Exception {
-            // Call the modified getStudentSubmissions method with 'this' as an argument
-            return getStudentSubmissions(service, courseId, courseWorkId, studentAttachments, this);
-        }
-
-        public void publishProgress(int progress) {
-            this.publish(progress);
-        }
-
-        @Override
-        protected void process(List<Integer> increments) {
-            for (Integer progress : increments) {
-                progressBar.setValue(progressBar.getValue() + progress);
-            }
-        }
-
-        @Override
-        protected void done() {
-            try {
-                List<NamedStudentSubmission> submissions = get();
-                for (NamedStudentSubmission submission : submissions) {
-                    studentSubmissionsListModel.addElement(submission);
-                }
-            } catch (InterruptedException | ExecutionException e) {
-                e.printStackTrace();
-            } finally {
-                progressBar.setVisible(false);
-                progressBar.setValue(0);
-                System.out.println("LOG: create viewer");
-                StudentAttachmentsViewer attachmentsViewer = new StudentAttachmentsViewer(driveService, new LinkedHashMap<>());
-                System.out.println("LOG: " + studentAttachments.size() + " attachments");
-                attachmentsViewer.setStudentAttachments(studentAttachments);
-                attachmentsViewer.refreshViewer();
-            }
-        }
-    }
+    public JProgressBar  progressBar;
+    public JFrame frame;
+    public DefaultListModel<NamedStudentSubmission> studentSubmissionsListModel;
+    public DefaultListModel<String> categorizedStudentsModel;
+    public JList<String> categorizedStudentsList;
+    public StudentAttachmentsViewer attachmentsViewer;
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
@@ -93,6 +39,7 @@ public class GoogleClassroom {
         GoogleAuthenticator authenticator = new GoogleAuthenticator();
         classroomService = authenticator.getClassroomService();
         driveService = authenticator.getDriveService();
+        attachmentsViewer = null; //initially null until we have retrieved some submissions
     }
 
     private void createAndShowGUI() throws IOException {
@@ -116,15 +63,15 @@ public class GoogleClassroom {
         assignmentsList.setCellRenderer(new CourseWorkCellRenderer());
         JScrollPane assignmentScrollPane = new JScrollPane(assignmentsList);
 
-        DefaultListModel<NamedStudentSubmission> studentSubmissionsListModel = new DefaultListModel<>();
+        studentSubmissionsListModel = new DefaultListModel<>();
         JList<NamedStudentSubmission> studentSubmissionsList = new JList<>(studentSubmissionsListModel);
         studentSubmissionsList.setCellRenderer(new StudentSubmissionCellRenderer());
 
         JSplitPane courseAndAssignmentSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, courseScrollPane, assignmentScrollPane);
         courseAndAssignmentSplitPane.setDividerLocation(400);
 
-        DefaultListModel<String> categorizedStudentsModel = new DefaultListModel<>();
-        JList<String> categorizedStudentsList = new JList<>(categorizedStudentsModel);
+        categorizedStudentsModel = new DefaultListModel<>();
+        categorizedStudentsList = new JList<>(categorizedStudentsModel);
         categorizedStudentsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         categorizedStudentsList.setLayoutOrientation(JList.VERTICAL);
         categorizedStudentsList.setVisibleRowCount(-1);
@@ -205,13 +152,12 @@ public class GoogleClassroom {
         return courseWorks;
     }
 
-    private List<NamedStudentSubmission> getStudentSubmissions(Classroom service, String courseId, String courseWorkId, Map<String, String> studentAttachments, FetchSubmissionsWorker worker) throws IOException {
+    public List<NamedStudentSubmission> getStudentSubmissions(String courseId, String courseWorkId, Map<String, String> studentAttachments, FetchSubmissionsWorker worker) throws IOException {
         List<NamedStudentSubmission> submissions = new ArrayList<>();
         String nextPageToken = null;
-
-        do {
-            System.out.println("LOG: getting submission page...");
-            com.google.api.services.classroom.model.ListStudentSubmissionsResponse response = service
+            do {
+                System.out.println("LOG: getting submission page...");
+                com.google.api.services.classroom.model.ListStudentSubmissionsResponse response = classroomService
                     .courses()
                     .courseWork()
                     .studentSubmissions()
@@ -222,26 +168,20 @@ public class GoogleClassroom {
 
             for (StudentSubmission submission : response.getStudentSubmissions()) {
                 String studentId = submission.getUserId();
-                System.out.println("LOG: getting " + studentId);
-                UserProfile studentProfile = service.userProfiles().get(studentId).execute();
+                System.out.println("LOG: fetching student " + studentId);
+                UserProfile studentProfile = classroomService.userProfiles().get(studentId).execute();
                 String studentName = studentProfile.getName().getFullName();
                 NamedStudentSubmission namedSubmission = new NamedStudentSubmission(studentName, submission);
                 submissions.add(namedSubmission);
 
                 // Fetch attachment
-                System.out.println("LOG: fetching...");
-                List<Attachment> attachments = namedSubmission.getAttachments();
+                System.out.println("LOG: fetching attachments");
+                List<Attachment> attachments = namedSubmission.getSubmission().getAssignmentSubmission().getAttachments();
+                worker.processAttachments(attachments, studentName);
+
                 if (!attachments.isEmpty() && attachments.get(0).getDriveFile() != null) {
                     String documentId = attachments.get(0).getDriveFile().getId();
-
-                    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                    try {
-                        driveService.files().export(documentId, "text/html").executeMediaAndDownloadTo(outputStream);
-                        String htmlContent = outputStream.toString(StandardCharsets.UTF_8.name());
-                        studentAttachments.put(studentName, htmlContent);
-                    } catch (IOException ex) {
-                        ex.printStackTrace();
-                    }
+                    studentAttachments.put(studentName, documentId); // Store the file ID instead of the HTML content
                 }
                 worker.publishProgress(1);
             }
@@ -252,37 +192,6 @@ public class GoogleClassroom {
         System.out.println("LOG: fetch complete!");
         return submissions;
     }
-
-    private List<NamedStudentSubmission> OLDgetStudentSubmissions(Classroom service, String courseId, String courseWorkId) throws IOException {
-        List<NamedStudentSubmission> submissions = new ArrayList<>();
-        String nextPageToken = null;
-
-        do {
-            System.out.println("LOG: getting submission page...");
-            com.google.api.services.classroom.model.ListStudentSubmissionsResponse response = service
-                    .courses()
-                    .courseWork()
-                    .studentSubmissions()
-                    .list(courseId, courseWorkId)
-                    .setPageSize(10)
-                    .setPageToken(nextPageToken)
-                    .execute();
-
-            for (StudentSubmission submission : response.getStudentSubmissions()) {
-                String studentId = submission.getUserId();
-                System.out.println("LOG: getting " + studentId);
-                UserProfile studentProfile = service.userProfiles().get(studentId).execute();
-                String studentName = studentProfile.getName().getFullName();
-                NamedStudentSubmission namedSubmission = new NamedStudentSubmission(studentName, submission);
-                submissions.add(namedSubmission);
-            }
-
-            nextPageToken = response.getNextPageToken();
-        } while (nextPageToken != null);
-
-        return submissions;
-    }
-
 
     private ListSelectionListener createCourseListSelectionListener(JFrame frame, JList<Course> courseList, DefaultListModel<CourseWork> assignmentListModel, List<Course> courses, Classroom service) {
         return e -> {
@@ -296,8 +205,11 @@ public class GoogleClassroom {
                     try {
                         List<com.google.api.services.classroom.model.CourseWork> assignments = getAssignments(service, courseId);
                         assignmentListModel.clear();
-                        for (com.google.api.services.classroom.model.CourseWork assignment : assignments) {
-                            assignmentListModel.addElement(assignment);
+                        categorizedStudentsModel.clear();
+                        if (assignments != null) {
+                            for (com.google.api.services.classroom.model.CourseWork assignment : assignments) {
+                                assignmentListModel.addElement(assignment);
+                            }
                         }
                     } catch (IOException ex) {
                         ex.printStackTrace();
@@ -319,68 +231,46 @@ public class GoogleClassroom {
                     String courseId = courses.get(courseList.getSelectedIndex()).getId();
                     String courseWorkId = assignmentsList.getSelectedValue().getId();
 
+                    if (attachmentsViewer !=null) {
+                        attachmentsViewer.hide(); // get rid of any existing viewer
+                    }
+
                     // Set the cursor to wait cursor
                     frame.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
 
+                    // get count of students in the class, for the progress bar
+                    try {
+                        int numberOfStudents = getNumberOfStudents(service, courseId);
+                        progressBar.setMaximum(numberOfStudents);
+                    } catch (IOException ex) {
+                        ex.printStackTrace();
+                    }
                     // Show the progress bar
                     progressBar.setVisible(true);
-                    progressBar.setMaximum(26); //TODO get the actual number of students in the class.
                     frame.revalidate();
                     frame.repaint();
 
+                    // Clear the categorizedStudentsModel before updating
+                    categorizedStudentsModel.clear();
+
                     // Create worker object to fetch submissions in the background
-                    FetchSubmissionsWorker worker = new FetchSubmissionsWorker(service, courseId, courseWorkId, studentAttachments, studentSubmissionsListModel);
+                    FetchSubmissionsWorker worker = new FetchSubmissionsWorker(this, courseId, courseWorkId, studentAttachments);
                     worker.execute();
-
                 }
             }
         };
     }
-
-    /*
-    private ListSelectionListener OLDcreateAssignmentsListSelectionListener(JFrame frame, JList<Course> courseList, JList<CourseWork> assignmentsList, DefaultListModel<NamedStudentSubmission> studentSubmissionsListModel, DefaultListModel<String> categorizedStudentsModel, List<Course> courses, Classroom service) {
-        return e -> {
-            if (!e.getValueIsAdjusting()) {
-                int selectedIndex = assignmentsList.getSelectedIndex();
-                if (selectedIndex != -1) {
-                    String courseId = courses.get(courseList.getSelectedIndex()).getId();
-                    String courseWorkId = assignmentsList.getSelectedValue().getId();
-
-                    // Set the cursor to wait cursor
-                    frame.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-
-                    System.out.println("LOG: create viewer");
-                    StudentAttachmentsViewer attachmentsViewer = new StudentAttachmentsViewer(driveService, new LinkedHashMap<>());
-                    try {
-                        System.out.println("LOG: get submissions");
-                        List<NamedStudentSubmission> studentSubmissions = getStudentSubmissions(service, courseId, courseWorkId);
-                        System.out.println(studentSubmissions.size() + " submissions");
-                        studentSubmissionsListModel.clear();
-                        categorizedStudentsModel.clear();
-
-                        Map<String, String> studentAttachments = fetchAllStudentAttachments(studentSubmissions);
-                        attachmentsViewer.setStudentAttachments(studentAttachments);
-                        attachmentsViewer.refreshViewer();
-
-                    } catch (IOException ex) {
-                        ex.printStackTrace();
-                    } finally {
-                        // Set the cursor back to default cursor
-                        frame.setCursor(Cursor.getDefaultCursor());
-                    }
-                }
-            }
-        };
-    }
-
-
-     */
 
     private ListSelectionListener createCategorizedStudentsListSelectionListener(JList<String> categorizedStudentsList, JList<NamedStudentSubmission> studentSubmissionsList, DefaultListModel<NamedStudentSubmission> studentSubmissionsListModel, DefaultListModel<String> submittedAttachmentsListModel) {
         return e -> {
             if (!e.getValueIsAdjusting()) {
                 int selectedIndex = categorizedStudentsList.getSelectedIndex();
                 if (selectedIndex != -1 && !studentSubmissionsListModel.isEmpty()) {
+                    // remove the submission status text to give just the student name
+                    String studentName = categorizedStudentsList.getSelectedValue().split(" - ")[0];
+                    attachmentsViewer.setCurrentStudentByName(studentName);
+                    attachmentsViewer.show();  // just in case the window has been closed
+
                     studentSubmissionsList.setSelectedIndex(selectedIndex);
 
                     // Clear the submittedAttachmentsListModel
@@ -415,40 +305,12 @@ public class GoogleClassroom {
                         } catch (IOException ex) {
                             ex.printStackTrace();
                         }
-//                        String htmlContent = null;
-//                        try {
-//                            htmlContent = outputStream.toString(StandardCharsets.UTF_8.name());
-//                        } catch (UnsupportedEncodingException ex) {
-//                            ex.printStackTrace();
-//                        }
                     } else {
                         JOptionPane.showMessageDialog(frame, "The selected submission has no accessible attachments.", "No Attachments", JOptionPane.INFORMATION_MESSAGE);
                     }
                 }
             }
         };
-    }
-
-    private Map<String, String> fetchAllStudentAttachments(java.util.List<NamedStudentSubmission> studentSubmissions) {
-        Map<String, String> studentAttachments = new LinkedHashMap<>();
-
-        for (NamedStudentSubmission submission : studentSubmissions) {
-            System.out.println("LOG: fetching...");
-            List<Attachment> attachments = submission.getAttachments();
-            if (!attachments.isEmpty() && attachments.get(0).getDriveFile() != null) {
-                String documentId = attachments.get(0).getDriveFile().getId();
-
-                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                try {
-                    driveService.files().export(documentId, "text/html").executeMediaAndDownloadTo(outputStream);
-                    String htmlContent = outputStream.toString(StandardCharsets.UTF_8.name());
-                    studentAttachments.put(submission.getStudentName(), htmlContent);
-                } catch (IOException ex) {
-                    ex.printStackTrace();
-                }
-            }
-        }
-        return studentAttachments;
     }
 
     private int getNumberOfStudents(Classroom service, String courseId) throws IOException {

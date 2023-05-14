@@ -17,8 +17,8 @@ public class SubmissionDetailsFrame extends JFrame {
         add(scrollPane, BorderLayout.CENTER);
 
         detailsTextArea.append("Student Name: " + submission.getStudentName() + "\n");
-        detailsTextArea.append("Submission ID: " + submission.getStudentSubmission().getId() + "\n");
-        detailsTextArea.append("Submission Status: " + submission.getStudentSubmission().getState() + "\n");
+        detailsTextArea.append("Submission ID: " + submission.getSubmission().getId() + "\n");
+        detailsTextArea.append("Submission Status: " + submission.getSubmission().getState() + "\n");
 
         setVisible(true);
     }

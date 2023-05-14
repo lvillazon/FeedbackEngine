@@ -9,7 +9,7 @@ public class StudentSubmissionCellRenderer extends DefaultListCellRenderer {
         if (value instanceof NamedStudentSubmission) {
             NamedStudentSubmission namedStudentSubmission = (NamedStudentSubmission) value;
             String studentName = namedStudentSubmission.getStudentName();
-            String assignmentStatus = namedStudentSubmission.getStudentSubmission().getState();
+            String assignmentStatus = namedStudentSubmission.getSubmission().getState();
             String displayText = studentName + " - " + assignmentStatus;
             return super.getListCellRendererComponent(list, displayText, index, isSelected, cellHasFocus);
         } else {
