@@ -6,6 +6,7 @@ import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.json.Json;
 import com.google.api.client.json.GenericJson;
 import com.google.api.client.util.ArrayMap;
+import org.jsoup.Jsoup;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -41,8 +42,21 @@ public class ChatGPT {
 
     private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
 
+    public String removeHtmlTags(String htmlString) {
+        // using a regex isn't smart enough to properly clean the code of all the HTML
+        // which causes input strings that are wildly over the 8000 token limit
+        // return htmlString.replaceAll("\\<.*?\\>", "");
+        // This attempts to parse it more cleverly
+        return Jsoup.parse(htmlString).text();
+    }
+
     public String getGeneratedText(String input) {
+        String plainText = removeHtmlTags(input);
+        System.out.println("Calling ChatGPT with the following input:");
+        System.out.println(plainText);
+        System.out.println("+++ end of input +++");
         String generatedText = "";
+        String testlink = "Mark this work: https://docs.google.com/document/d/1saLgGsGxaH8MecGPbdZXbK3ddR2QDGoQ8RhDvyzl5Os/edit#heading=h.gjdgxs";
 
         try {
             HttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
@@ -56,11 +70,12 @@ public class ChatGPT {
 
             List<Map<String, String>> messages = Arrays.asList(
                     new HashMap<String, String>() {{ put("role", "system"); put("content", "You are a helpful assistant."); }},
-                    new HashMap<String, String>() {{ put("role", "user"); put("content", input); }}
+                    new HashMap<String, String>() {{ put("role", "user"); put("content", testlink); }}
             );
             Map<String, Object> data = new HashMap<>();
             data.put("model", MODEL);
             data.put("messages", messages);
+            data.put("plugin", "link reader"); // this activates the Link Reader plugin for the current session
 
             HttpContent content = new JsonHttpContent(JSON_FACTORY, data);
             HttpRequest request = requestFactory.buildPostRequest(url, content);
