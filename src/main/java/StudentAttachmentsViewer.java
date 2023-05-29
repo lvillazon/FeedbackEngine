@@ -131,7 +131,6 @@ public class StudentAttachmentsViewer {
 
             // Call the OpenAI API with the combined text
             ChatGPT chatGPT = new ChatGPT();
-            combinedText = "Tell me a joke about Elvis."; // TODO Placeholder just to check input text limit is not an issue
             String apiResponse = chatGPT.getGeneratedText(combinedText);
 
             // Paste the API response into the feedbackTextArea

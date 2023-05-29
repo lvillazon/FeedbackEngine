@@ -4,3 +4,4 @@
 /build/classes/java/main/
 /src/main/resources/credentials.json
 /tokens/StoredCredential
+/src/main/resources/chatGPT_api_key.txt
